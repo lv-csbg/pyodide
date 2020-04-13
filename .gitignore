@@ -12,14 +12,13 @@ firefox/
 .vscode
 .idea
 
-build
 downloads
 host
 installs
 ccache
 
 /root/
-/build/
+
 
 /emsdk/emsdk
 
