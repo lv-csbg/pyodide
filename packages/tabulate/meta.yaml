@@ -1,0 +1,11 @@
+package:
+  name: tabulate
+  version: 0.8.6
+
+source:
+  sha256: 5470cc6687a091c7042cee89b2946d9235fe9f6d49c193a4ae2ac7bf386737c8
+  url: https://files.pythonhosted.org/packages/c4/41/523f6a05e6dc3329a5660f6a81254c6cd87e5cfb5b7482bae3391d86ec3a/tabulate-0.8.6.tar.gz
+
+test:
+  imports:
+  - tabulate
