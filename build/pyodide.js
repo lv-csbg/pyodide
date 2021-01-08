@@ -3,10 +3,10 @@
  */
 
 var languagePluginLoader = new Promise((resolve, reject) => {
-  // This is filled in by the Makefile to be either a local file or the
-  // deployed location. TODO: This should be done in a less hacky
-  // way.
-  var baseURL = self.languagePluginUrl || 'https://pyodide.cdn.iodide.io/';
+  // Note: PYODIDE_BASE_URL is an environement variable replaced in
+  // in this template in the Makefile. It's recommended to always set
+  // languagePluginUrl in any case.
+  var baseURL = self.languagePluginUrl || './';
   baseURL = baseURL.substr(0, baseURL.lastIndexOf('/')) + '/';
 
   ////////////////////////////////////////////////////////////
@@ -301,12 +301,12 @@ var languagePluginLoader = new Promise((resolve, reject) => {
   let PUBLIC_API = [
     'globals',
     'loadPackage',
+    'loadPackagesFromImports',
     'loadedPackages',
     'pyimport',
     'repr',
     'runPython',
     'runPythonAsync',
-    'checkABI',
     'version',
     'autocomplete',
   ];
@@ -321,7 +321,6 @@ var languagePluginLoader = new Promise((resolve, reject) => {
 
   ////////////////////////////////////////////////////////////
   // Loading Pyodide
-  let wasmURL = `${baseURL}pyodide.asm.wasm`;
   let Module = {};
   self.Module = Module;
 
@@ -331,38 +330,47 @@ var languagePluginLoader = new Promise((resolve, reject) => {
   Module.preloadedWasm = {};
   let isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
 
-  let wasm_promise;
-  if (WebAssembly.compileStreaming === undefined) {
-    wasm_promise = fetch(wasmURL)
-                       .then(response => response.arrayBuffer())
-                       .then(bytes => WebAssembly.compile(bytes));
-  } else {
-    wasm_promise = WebAssembly.compileStreaming(fetch(wasmURL));
-  }
+  Module.runPython = code => Module.pyodide_py.eval_code(code, Module.globals);
 
-  Module.instantiateWasm = (info, receiveInstance) => {
-    wasm_promise.then(module => WebAssembly.instantiate(module, info))
-        .then(instance => receiveInstance(instance));
-    return {};
-  };
-
-  Module.checkABI = function(ABI_number) {
-    if (ABI_number !== parseInt('1')) {
-      var ABI_mismatch_exception =
-          `ABI numbers differ. Expected 1, got ${ABI_number}`;
-      console.error(ABI_mismatch_exception);
-      throw ABI_mismatch_exception;
+  // clang-format off
+  Module.loadPackagesFromImports  = async function(code, messageCallback, errorCallback) {
+    let imports = Module.pyodide_py.find_imports(code);
+    if (imports.length === 0) {
+      return;
     }
-    return true;
+    let packageNames =
+        self.pyodide._module.packages.import_name_to_package_name;
+    let packages = new Set();
+    for (let name of imports) {
+      if (name in packageNames) {
+        packages.add(name);
+      }
+    }
+    if (packages.size) {
+      await loadPackage(
+        Array.from(packages.keys()),
+        messageCallback,
+        errorCallback,
+      );
+    }
+  };
+  // clang-format on
+
+  Module.pyimport = name => Module.globals[name];
+
+  Module.runPythonAsync = async function(code, messageCallback, errorCallback) {
+    await Module.loadPackagesFromImports(code, messageCallback, errorCallback);
+    return Module.runPython(code);
   };
 
-  Module.autocomplete =
-      function(path) {
+  Module.version = function() { return Module.pyodide_py.__version__; };
+
+  Module.autocomplete = function(path) {
     var pyodide_module = Module.pyimport("pyodide");
     return pyodide_module.get_completions(path);
-  }
+  };
 
-      Module.locateFile = (path) => baseURL + path;
+  Module.locateFile = (path) => baseURL + path;
   var postRunPromise = new Promise((resolve, reject) => {
     Module.postRun = () => {
       delete self.Module;
@@ -370,16 +378,8 @@ var languagePluginLoader = new Promise((resolve, reject) => {
           .then((response) => response.json())
           .then((json) => {
             fixRecursionLimit(self.pyodide);
-            self.pyodide.globals =
-                self.pyodide.runPython('import sys\nsys.modules["__main__"]');
             self.pyodide = makePublicAPI(self.pyodide, PUBLIC_API);
             self.pyodide._module.packages = json;
-            if (self.iodide !== undefined) {
-              // Perform some completions immediately so there isn't a delay on
-              // the first call to autocomplete
-              self.pyodide.runPython('import pyodide');
-              self.pyodide.runPython('pyodide.get_completions("")');
-            }
             resolve();
           });
     };
@@ -397,60 +397,14 @@ var languagePluginLoader = new Promise((resolve, reject) => {
 
   Promise.all([ postRunPromise, dataLoadPromise ]).then(() => resolve());
 
-  const data_script_src = `${baseURL}pyodide.asm.data.js`;
-  loadScript(data_script_src, () => {
-    const scriptSrc = `${baseURL}pyodide.asm.js`;
-    loadScript(scriptSrc, () => {
-      // The emscripten module needs to be at this location for the core
-      // filesystem to install itself. Once that's complete, it will be replaced
-      // by the call to `makePublicAPI` with a more limited public API.
-      self.pyodide = pyodide(Module);
-      self.pyodide.loadedPackages = {};
-      self.pyodide.loadPackage = loadPackage;
-    }, () => {});
+  const scriptSrc = `${baseURL}pyodide.asm.js`;
+  loadScript(scriptSrc, () => {
+    // The emscripten module needs to be at this location for the core
+    // filesystem to install itself. Once that's complete, it will be replaced
+    // by the call to `makePublicAPI` with a more limited public API.
+    self.pyodide = pyodide(Module);
+    self.pyodide.loadedPackages = {};
+    self.pyodide.loadPackage = loadPackage;
   }, () => {});
-
-  ////////////////////////////////////////////////////////////
-  // Iodide-specific functionality, that doesn't make sense
-  // if not using with Iodide.
-  if (self.iodide !== undefined) {
-    // Load the custom CSS for Pyodide
-    let link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.type = 'text/css';
-    link.href = `${baseURL}renderedhtml.css`;
-    document.getElementsByTagName('head')[0].appendChild(link);
-
-    // Add a custom output handler for Python objects
-    self.iodide.addOutputRenderer({
-      shouldRender : (val) => {
-        return (typeof val === 'function' &&
-                pyodide._module.PyProxy.isPyProxy(val));
-      },
-
-      render : (val) => {
-        let div = document.createElement('div');
-        div.className = 'rendered_html';
-        var element;
-        if (val._repr_html_ !== undefined) {
-          let result = val._repr_html_();
-          if (typeof result === 'string') {
-            div.appendChild(new DOMParser()
-                                .parseFromString(result, 'text/html')
-                                .body.firstChild);
-            element = div;
-          } else {
-            element = result;
-          }
-        } else {
-          let pre = document.createElement('pre');
-          pre.textContent = val.toString();
-          div.appendChild(pre);
-          element = div;
-        }
-        return element.outerHTML;
-      }
-    });
-  }
 });
 languagePluginLoader
