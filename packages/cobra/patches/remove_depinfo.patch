@@ -1,0 +1,75 @@
+diff --git a/cobra.egg-info/requires.txt b/cobra.egg-info/requires.txt
+index bf54610..9eab7f9 100644
+--- a/cobra.egg-info/requires.txt
++++ b/cobra.egg-info/requires.txt
+@@ -6,7 +6,6 @@ numpy>=1.13
+ pandas>=0.17.0
+ optlang>=1.4.2
+ tabulate
+-depinfo
+ 
+ [all]
+ python-libsbml
+diff --git a/cobra/util/util.py b/cobra/util/util.py
+index 96b0ed1..4632b0f 100644
+--- a/cobra/util/util.py
++++ b/cobra/util/util.py
+@@ -2,8 +2,6 @@
+ 
+ from __future__ import absolute_import
+ 
+-from depinfo import print_dependencies
+-
+ 
+ def format_long_string(string, max_length=50):
+     if len(string) > max_length:
+@@ -26,4 +24,24 @@ class AutoVivification(dict):
+ 
+ def show_versions():
+     """Print dependency information."""
+-    print_dependencies("cobra")
++    output = """System Information
++==================
++OS                   Unknown
++OS-release           Unknown
++Python                 3.7.3
++
++Package Versions
++================
++cobra        0.14.3
++future       0.18.2
++numpy        1.15.1
++optlang       1.4.4
++pandas       0.23.4
++ruamel.yaml 0.16.10
++setuptools   40.0.0
++six          1.12.0
++swiglpk      4.65.1
++tabulate      0.8.6
++#wheel        0.33.1
++"""
++    print(output)
+diff --git a/setup.cfg b/setup.cfg
+index 92073f5..7cca731 100644
+--- a/setup.cfg
++++ b/setup.cfg
+@@ -51,7 +51,6 @@ multi_line_output = 4
+ lines_after_imports = 2
+ known_first_party = cobra
+ known_third_party = 
+-	depinfo
+ 	future
+ 	numpy
+ 	optlang
+diff --git a/setup.py b/setup.py
+index 0a2e142..873f70d 100644
+--- a/setup.py
++++ b/setup.py
+@@ -50,7 +50,6 @@ if __name__ == "__main__":
+             "pandas>=0.17.0",
+             "optlang>=1.4.2",
+             "tabulate",
+-            "depinfo"
+         ],
+         tests_require=[
+             "jsonschema > 2.5",

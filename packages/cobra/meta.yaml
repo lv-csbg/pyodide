@@ -1,0 +1,24 @@
+package:
+  name: cobra
+  version: 0.14.2
+
+source:
+  sha256: af1a89ceb4519b5f28ac4f1af6bacf935c2b2dcb210117be2ad0304a271e2155
+  url: https://files.pythonhosted.org/packages/4b/bf/941c9ac4f67a539ee00c4ca5720b8b2853f9a5df53c9ce3f25ac47a0fa5e/cobra-0.14.2.tar.gz
+  patches:
+    - patches/remove_multiprocessing.patch
+    - patches/remove_depinfo.patch
+    - patches/remove_ctypes.patch
+
+requirements:
+  run:
+    - pandas
+    - optlang
+    - future
+    - ruamel
+
+test:
+  imports:
+  - cobra
+  - cobra.io
+  - cobra.flux_analysis

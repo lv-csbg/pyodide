@@ -1,0 +1,26 @@
+diff --git a/cobra/flux_analysis/sampling.py b/cobra/flux_analysis/sampling.py
+index 02feb8e..d7c921a 100644
+--- a/cobra/flux_analysis/sampling.py
++++ b/cobra/flux_analysis/sampling.py
+@@ -8,7 +8,6 @@ where possible to provide a uniform interface.
+ 
+ from __future__ import absolute_import, division
+ 
+-import ctypes
+ from collections import namedtuple
+ from logging import getLogger
+ from time import time
+@@ -82,11 +81,9 @@ def shared_np_array(shape, data=None, integer=False):
+     """
+     size = np.prod(shape)
+     if integer:
+-        array = ctypes.c_int64 * int(size)
+-        np_array = np.frombuffer(array, dtype="int64")
++        np_array = np.zeros(int(size), dtype="int64")
+     else:
+-        array = ctypes.c_double * int(size)
+-        np_array = np.frombuffer(array)
++        np_array = np.zeros(int(size))
+     np_array = np_array.reshape(shape)
+ 
+     if data is not None:

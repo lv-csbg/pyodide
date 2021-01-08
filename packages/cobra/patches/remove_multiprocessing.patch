@@ -1,0 +1,162 @@
+diff --git a/cobra/core/configuration.py b/cobra/core/configuration.py
+index 60e04e5..07486ad 100644
+--- a/cobra/core/configuration.py
++++ b/cobra/core/configuration.py
+@@ -6,7 +6,6 @@ from __future__ import absolute_import
+ 
+ import logging
+ import types
+-from multiprocessing import cpu_count
+ from warnings import warn
+ 
+ from six import string_types, with_metaclass
+@@ -62,7 +61,7 @@ class BaseConfiguration(object):
+                 break
+         self.bounds = -1000.0, 1000.0
+         try:
+-            self.processes = cpu_count()
++            self.processes = 1
+         except NotImplementedError:
+             LOGGER.warning(
+                 "The number of cores could not be detected - assuming 1.")
+diff --git a/cobra/flux_analysis/deletion.py b/cobra/flux_analysis/deletion.py
+index 2ba9c59..f1f870b 100644
+--- a/cobra/flux_analysis/deletion.py
++++ b/cobra/flux_analysis/deletion.py
+@@ -1,7 +1,6 @@
+ # -*- coding: utf-8 -*-
+ 
+ import logging
+-import multiprocessing
+ from builtins import dict, map
+ from functools import partial
+ from itertools import product
+@@ -139,25 +138,10 @@ def _multi_deletion(model, entity, element_lists, method="fba",
+             result.set_index('ids', inplace=True)
+             return result
+ 
+-        if processes > 1:
+-            worker = dict(gene=_gene_deletion_worker,
+-                          reaction=_reaction_deletion_worker)[entity]
+-            chunk_size = len(args) // processes
+-            pool = multiprocessing.Pool(
+-                processes, initializer=_init_worker, initargs=(model,)
+-            )
+-            results = extract_knockout_results(pool.imap_unordered(
+-                worker,
+-                args,
+-                chunksize=chunk_size
+-            ))
+-            pool.close()
+-            pool.join()
+-        else:
+-            worker = dict(gene=_gene_deletion,
+-                          reaction=_reaction_deletion)[entity]
+-            results = extract_knockout_results(map(
+-                partial(worker, model), args))
++        worker = dict(gene=_gene_deletion,
++                        reaction=_reaction_deletion)[entity]
++        results = extract_knockout_results(map(
++            partial(worker, model), args))
+         return results
+ 
+ 
+diff --git a/cobra/flux_analysis/sampling.py b/cobra/flux_analysis/sampling.py
+index 85670d5..02feb8e 100644
+--- a/cobra/flux_analysis/sampling.py
++++ b/cobra/flux_analysis/sampling.py
+@@ -11,7 +11,6 @@ from __future__ import absolute_import, division
+ import ctypes
+ from collections import namedtuple
+ from logging import getLogger
+-from multiprocessing import Array, Pool
+ from time import time
+ 
+ import numpy as np
+@@ -83,11 +82,11 @@ def shared_np_array(shape, data=None, integer=False):
+     """
+     size = np.prod(shape)
+     if integer:
+-        array = Array(ctypes.c_int64, int(size))
+-        np_array = np.frombuffer(array.get_obj(), dtype="int64")
++        array = ctypes.c_int64 * int(size)
++        np_array = np.frombuffer(array, dtype="int64")
+     else:
+-        array = Array(ctypes.c_double, int(size))
+-        np_array = np.frombuffer(array.get_obj())
++        array = ctypes.c_double * int(size)
++        np_array = np.frombuffer(array)
+     np_array = np_array.reshape(shape)
+ 
+     if data is not None:
+@@ -805,25 +804,9 @@ class OptGPSampler(HRSampler):
+         we recommend to calculate large numbers of samples at once
+         (`n` > 1000).
+         """
+-        if self.processes > 1:
+-            n_process = np.ceil(n / self.processes).astype(int)
+-            n = n_process * self.processes
+-            # The cast to list is weird but not doing it gives recursion
+-            # limit errors, something weird going on with multiprocessing
+-            args = list(zip(
+-                [n_process] * self.processes, range(self.processes)))
+-            # No with statement or starmap here since Python 2.x
+-            # does not support it :(
+-            mp = Pool(self.processes, initializer=mp_init, initargs=(self,))
+-            results = mp.map(_sample_chain, args, chunksize=1)
+-            mp.close()
+-            mp.join()
+-            chains = np.vstack([r[1] for r in results])
+-            self.retries += sum(r[0] for r in results)
+-        else:
+-            mp_init(self)
+-            results = _sample_chain((n, 0))
+-            chains = results[1]
++        mp_init(self)
++        results = _sample_chain((n, 0))
++        chains = results[1]
+ 
+         # Update the global center
+         self.center = (self.n_samples * self.center +
+diff --git a/cobra/flux_analysis/variability.py b/cobra/flux_analysis/variability.py
+index 118f3d2..70f3bce 100644
+--- a/cobra/flux_analysis/variability.py
++++ b/cobra/flux_analysis/variability.py
+@@ -3,7 +3,6 @@
+ from __future__ import absolute_import
+ 
+ import logging
+-import multiprocessing
+ from builtins import map
+ from warnings import warn
+ 
+@@ -175,26 +174,9 @@ def flux_variability_analysis(model, reaction_list=None, loopless=False,
+ 
+         model.objective = Zero  # This will trigger the reset as well
+         for what in ("minimum", "maximum"):
+-            if processes > 1:
+-                # We create and destroy a new pool here in order to set the
+-                # objective direction for all reactions. This creates a
+-                # slight overhead but seems the most clean.
+-                chunk_size = len(reaction_ids) // processes
+-                pool = multiprocessing.Pool(
+-                    processes,
+-                    initializer=_init_worker,
+-                    initargs=(model, loopless, what[:3])
+-                )
+-                for rxn_id, value in pool.imap_unordered(_fva_step,
+-                                                         reaction_ids,
+-                                                         chunksize=chunk_size):
+-                    fva_result.at[rxn_id, what] = value
+-                pool.close()
+-                pool.join()
+-            else:
+-                _init_worker(model, loopless, what[:3])
+-                for rxn_id, value in map(_fva_step, reaction_ids):
+-                    fva_result.at[rxn_id, what] = value
++            _init_worker(model, loopless, what[:3])
++            for rxn_id, value in map(_fva_step, reaction_ids):
++                fva_result.at[rxn_id, what] = value
+ 
+     return fva_result[["minimum", "maximum"]]
+ 
