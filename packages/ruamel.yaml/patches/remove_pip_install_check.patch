@@ -1,0 +1,14 @@
+diff --git a/setup.py b/setup.py
+index f22dceb..57b0c05 100644
+--- a/setup.py
++++ b/setup.py
+@@ -331,9 +331,6 @@ class NameSpacePackager(object):
+             if os.environ.get('READTHEDOCS', None) == 'True':
+                 os.system('pip install .')
+                 sys.exit(0)
+-            if not os.environ.get('RUAMEL_NO_PIP_INSTALL_CHECK', False):
+-                print('error: you have to install with "pip install ."')
+-                sys.exit(1)
+         # If you only support an extension module on Linux, Windows thinks it
+         # is pure. That way you would get pure python .whl files that take
+         # precedence for downloading on Linux over source with compilable C code
